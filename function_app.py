@@ -1,7 +1,7 @@
 # function_app.py
 import azure.functions as func
 
-from app.main import app as fastapi_app
+from main import app as fastapi_app
 
 app = func.AsgiFunctionApp(
     app=fastapi_app,
