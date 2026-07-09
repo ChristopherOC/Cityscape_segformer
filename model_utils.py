@@ -19,6 +19,7 @@ import torch.nn.functional as F
 from PIL import Image
 import segmentation_models_pytorch as smp
 import torchvision.transforms as T
+from azure.storage.blob import BlobServiceClient
 
 # ----------------------------------------------------------------------------
 # Configuration générale
@@ -103,8 +104,36 @@ def _load_checkpoint(model: torch.nn.Module, weights_path: Path) -> torch.nn.Mod
     return model
 
 
+def download_models_from_blob():
+    conn_str = os.environ.get("MODEL_BLOB_CONNECTION_STRING")
+    container_name = os.environ.get("AZURE_BLOB_CONTAINER", "modelweights")
+
+    if not conn_str:
+        print("[ATTENTION] AZURE_STORAGE_CONNECTION_STRING non définie.")
+        return
+
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+    blob_service = BlobServiceClient.from_connection_string(conn_str)
+    container = blob_service.get_container_client(container_name)
+
+    for blob_name, local_path in [
+        ("unet_model.pth", UNET_WEIGHTS),
+        ("segformer.pth", SEGFORMER_WEIGHTS),
+    ]:
+        if local_path.exists():
+            continue
+
+        print(f"Téléchargement de {blob_name} depuis Azure Blob...")
+        blob_client = container.get_blob_client(blob_name)
+
+        with open(local_path, "wb") as f:
+            f.write(blob_client.download_blob().readall())
+            
 def load_models() -> Tuple[torch.nn.Module, torch.nn.Module]:
-    """Charge les deux modèles entraînés (U-Net et SegFormer) en mode eval."""
+    """Charge les deux modèles entraînés."""
+    download_models_from_blob()
+
     unet = _load_checkpoint(build_unet(), UNET_WEIGHTS)
     segformer = _load_checkpoint(build_segformer(), SEGFORMER_WEIGHTS)
     return unet, segformer
